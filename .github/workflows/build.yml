@@ -6,12 +6,13 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
-  release:
-    types: [published]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,45 +26,49 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Generate signing keystore (for tag/release builds)
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
+      # ---- Debug build (branch pushes & PRs) ----
+      - name: Build debug APK
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        run: ./gradlew assembleDebug
+
+      - name: Upload debug APK artifact
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: Firefont-${{ github.sha }}-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      # ---- Release build (tag pushes) ----
+      - name: Generate signing keystore
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           keytool -genkey -v -keystore firefont.jks \
             -alias firefont -keyalg RSA -keysize 2048 \
             -validity 3650 -storepass firefont123 -keypass firefont123 \
             -dname "CN=Firefont, OU=Firefont, O=Firefont, L=Unknown, ST=Unknown, C=CN"
 
-      - name: Build debug APK
-        if: "!startsWith(github.ref, 'refs/tags/v') && github.event_name != 'release'"
-        run: ./gradlew assembleDebug
-
       - name: Build release APK
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           KEYSTORE_PASSWORD: firefont123
           KEY_ALIAS: firefont
           KEY_PASSWORD: firefont123
         run: ./gradlew assembleRelease
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Firefont-${{ github.ref_name }}
-          path: app/build/outputs/apk/debug/app-debug.apk
-        if: "!startsWith(github.ref, 'refs/tags/v') && github.event_name != 'release'"
-
-      - name: Upload release APK
+      - name: Upload release APK artifact
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: Firefont-${{ github.ref_name }}
           path: app/build/outputs/apk/release/app-release.apk
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
 
-      - name: Attach APK to release
-        if: github.event_name == 'release'
+      - name: Create Release and upload APK
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" \
-            app/build/outputs/apk/release/app-release.apk \
-            --clobber
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes "See [README](https://github.com/${{ github.repository }}) for installation instructions." \
+            app/build/outputs/apk/release/app-release.apk#"Firefont-${{ github.ref_name }}.apk" \
+            --verify-tag
