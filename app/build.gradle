@@ -1,0 +1,48 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.firefont'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.firefont'
+        minSdk 26
+        targetSdk 36
+        versionCode 2
+        versionName '1.1'
+    }
+
+    signingConfigs {
+        release {
+            // Properties set conditionally below
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// Conditionally configure signing if the keystore exists
+def keystoreFile = file('../firefont.jks')
+if (keystoreFile.exists()) {
+    android.signingConfigs.release.storeFile = keystoreFile
+    android.signingConfigs.release.storePassword = System.getenv('KEYSTORE_PASSWORD') ?: 'firefont123'
+    android.signingConfigs.release.keyAlias = System.getenv('KEY_ALIAS') ?: 'firefont'
+    android.signingConfigs.release.keyPassword = System.getenv('KEY_PASSWORD') ?: 'firefont123'
+    android.buildTypes.release.signingConfig = android.signingConfigs.release
+}
+
+dependencies {
+    // Xposed API - compileOnly means it's NOT included in the APK
+    compileOnly files('libs/api-82.jar')
+}
